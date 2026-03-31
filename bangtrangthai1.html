@@ -1,0 +1,232 @@
+<head><script type="module">
+import{createApp as $,ref as R,computed as C,watch as W,onMounted as M}from'https://cdn.jsdelivr.net/npm/vue@3/dist/vue.esm-browser.prod.js';
+import{createPinia as P,defineStore as D}from'https://cdn.jsdelivr.net/npm/pinia/+esm';
+
+/* ===== MVU Bridge ===== */
+const waitMvu=()=>new Promise(r=>{const c=()=>{if(globalThis.Mvu){r(globalThis.Mvu);return}setTimeout(c,200)};c()});
+const getVar=async p=>{const m=await waitMvu();const d=await m.getMvuData({type:'message',message_id:'latest'});if(!d)return null;const v=d.stat_data??d;return p.split('.').reduce((o,k)=>o?.[k],v)};
+const setVar=async(p,v)=>{const m=await waitMvu();const d=await m.getMvuData({type:'message',message_id:'latest'});if(!d)return;const s=p.split('.');let o=d.stat_data??d;for(let i=0;i<s.length-1;i++)o=o[s[i]];o[s[s.length-1]]=v;if(d.replaceMvuData)await d.replaceMvuData()};
+
+/* ===== Store ===== */
+const useApp=D('app',()=>{const tab=R('status');const loading=R(true);const sys=R({});const roles=R({});const tasks=R({});const inventory=R({});return{tab,loading,sys,roles,tasks,inventory}});
+
+/* ===== App ===== */
+const App={setup(){
+const s=useApp();const err=R('');
+const refresh=async()=>{
+try{s.loading=true;
+const[h,r,t,i]=await Promise.all([
+getVar('hệ_thống')||getVar('系统'),
+getVar('nhân_vật')||getVar('角色'),
+getVar('nhiệm_vụ')||getVar('任务'),
+getVar('hệ_thống.vật_phẩm_đang_có')||getVar('系统.持有物品')
+]);
+s.sys=h||{};s.roles=r||{};s.tasks=t||{};s.inventory=i||{};s.loading=false;
+}catch(e){err.value=e.message;s.loading=false}};
+M(()=>{refresh();setInterval(refresh,10000)});
+const tabs=[{id:'status',icon:'📊',label:'Trạng thái'},{id:'hypno',icon:'🌀',label:'Thôi Miên'},{id:'calendar',icon:'📅',label:'Lịch'},{id:'quests',icon:'🏆',label:'Nhiệm vụ'},{id:'inventory',icon:'🎒',label:'Kho đồ'},{id:'help',icon:'❓',label:'Trợ giúp'}];
+return{s,tabs,err,refresh};},
+template:`<div style="display:flex;height:100vh;background:#0f0f23;color:#e0e0e0;font-family:'Segoe UI',sans-serif;overflow:hidden">
+<div style="width:64px;background:#1a1a2e;display:flex;flex-direction:column;align-items:center;padding:8px 0;gap:4px;border-right:1px solid #2a2a4a">
+<div v-for="t in tabs" :key="t.id" @click="s.tab=t.id" :style="{width:'48px',height:'48px',display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',borderRadius:'12px',cursor:'pointer',fontSize:'20px',background:s.tab===t.id?'#6366f1':'transparent',transition:'all .2s',gap:'2px'}">
+<span>{{t.icon}}</span><span style="font-size:8px">{{t.label}}</span></div></div>
+<div style="flex:1;overflow-y:auto;padding:16px">
+<div v-if="s.loading" style="display:flex;align-items:center;justify-content:center;height:100%"><div style="text-align:center"><div style="font-size:48px;margin-bottom:16px">🌀</div><div>Đang tải dữ liệu...</div></div></div>
+<div v-else-if="err" style="color:#ef4444;text-align:center;padding:20px">{{err}}<br><button @click="refresh" style="margin-top:8px;padding:8px 16px;background:#6366f1;border:none;color:white;border-radius:8px;cursor:pointer">Thử lại</button></div>
+<template v-else>
+<page-status v-if="s.tab==='status'" :sys="s.sys" :roles="s.roles"/>
+<page-hypno v-else-if="s.tab==='hypno'" :sys="s.sys"/>
+<page-calendar v-else-if="s.tab==='calendar'" :sys="s.sys"/>
+<page-quests v-else-if="s.tab==='quests'" :tasks="s.tasks"/>
+<page-inventory v-else-if="s.tab==='inventory'" :inv="s.inventory"/>
+<page-help v-else-if="s.tab==='help'"/>
+</template></div></div>`
+};
+
+/* ===== Components ===== */
+const StatBar={props:['label','value','max','color'],template:`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span>{{label}}</span><span>{{value??0}}{{max?'/'+max:''}}</span></div><div style="height:6px;background:#2a2a4a;border-radius:3px;overflow:hidden"><div :style="{width:Math.min(100,((value??0)/(max||100))*100)+'%',height:'100%',background:color||'#6366f1',borderRadius:'3px',transition:'width .5s'}"></div></div></div>`};
+
+const PageStatus={props:['sys','roles'],components:{StatBar},setup(p){
+const day=C(()=>p.sys?.ngày_hiện_tại||'--');
+const time=C(()=>p.sys?.thời_gian_hiện_tại||'--');
+const schedule=C(()=>p.sys?.lịch_trình_hiện_tại||'--');
+const energy=C(()=>p.sys?._năng_lượng_mc||0);
+const maxEnergy=C(()=>p.sys?._giới_hạn_năng_lượng_mc||100);
+const mcPoints=C(()=>p.sys?.điểm_mc_hiện_tại||0);
+const suspicion=C(()=>p.sys?.độ_khả_nghi_của_nhân_vật_chính||0);
+const money=C(()=>p.sys?.tiền_tiêu_vặt_đang_có||0);
+const roleNames=C(()=>Object.keys(p.roles||{}));
+const getStat=(name,key)=>{const r=p.roles?.[name];if(!r||typeof r==='string')return 0;return r[key]||0};
+return{day,time,schedule,energy,maxEnergy,mcPoints,suspicion,money,roleNames,getStat};},
+template:`<div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #2a2a4a">
+<div style="font-size:16px;font-weight:bold;margin-bottom:12px;color:#a5b4fc">📱 Hệ thống</div>
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px">
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">📅 Ngày hiện tại</div><div style="font-size:18px;font-weight:bold">{{day}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">⏰ Thời gian</div><div style="font-size:18px;font-weight:bold">{{time}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">📋 Lịch trình</div><div style="font-size:14px">{{schedule}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">⚡ Năng lượng MC</div><div style="font-size:18px;font-weight:bold;color:#fbbf24">{{energy}}/{{maxEnergy}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">💰 Điểm MC</div><div style="font-size:18px;font-weight:bold;color:#34d399">{{mcPoints}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">🔍 Độ khả nghi</div><div style="font-size:18px;font-weight:bold;color:#f87171">{{suspicion}}%</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">💴 Tiền tiêu vặt</div><div style="font-size:18px;font-weight:bold">{{money?.toLocaleString()}} ¥</div></div>
+</div></div>
+<div v-for="name in roleNames" :key="name" style="background:#1a1a2e;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #2a2a4a">
+<div style="font-size:16px;font-weight:bold;margin-bottom:12px;color:#c4b5fd">👤 {{name}}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+<StatBar label="Độ cảnh giác" :value="getStat(name,'độ_cảnh_giác')" :max="100" color="#ef4444"/>
+<StatBar label="Độ phục tùng" :value="getStat(name,'độ_phục_tùng')" :max="100" color="#3b82f6"/>
+<StatBar label="Độ hảo cảm" :value="getStat(name,'độ_hảo_cảm')" :max="100" color="#ec4899"/>
+<StatBar label="Dục vọng" :value="getStat(name,'dục_vọng')" :max="100" color="#f97316"/>
+<StatBar label="Chỉ số khoái cảm" :value="getStat(name,'chỉ_số_khoái_cảm')" color="#a855f7"/>
+</div>
+<div style="margin-top:12px;font-size:13px;color:#888">Độ nhạy cảm:</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+<StatBar label="Âm vật" :value="getStat(name,'độ_nhạy_cảm_âm_vật')" :max="100" color="#f472b6"/>
+<StatBar label="Tiểu huyệt" :value="getStat(name,'độ_nhạy_cảm_tiểu_huyệt')" :max="100" color="#fb7185"/>
+<StatBar label="Cúc huyệt" :value="getStat(name,'độ_nhạy_cảm_cúc_huyệt')" :max="100" color="#fda4af"/>
+<StatBar label="Niệu đạo" :value="getStat(name,'độ_nhạy_cảm_niệu_đạo')" :max="100" color="#f9a8d4"/>
+<StatBar label="Nhũ hoa" :value="getStat(name,'độ_nhạy_cảm_nhũ_hoa')" :max="100" color="#fbcfe8"/>
+</div>
+<div style="margin-top:12px;font-size:13px;color:#888">Số lần lên đỉnh:</div>
+<div style="display:flex;gap:12px;margin-top:4px;flex-wrap:wrap">
+<div style="background:#0f0f23;padding:8px 12px;border-radius:8px;font-size:12px">Âm vật: <b>{{getStat(name,'số_lần_lên_đỉnh_âm_vật')}}</b></div>
+<div style="background:#0f0f23;padding:8px 12px;border-radius:8px;font-size:12px">Tiểu huyệt: <b>{{getStat(name,'số_lần_lên_đỉnh_tiểu_huyệt')}}</b></div>
+<div style="background:#0f0f23;padding:8px 12px;border-radius:8px;font-size:12px">Cúc huyệt: <b>{{getStat(name,'số_lần_lên_đỉnh_cúc_huyệt')}}</b></div>
+<div style="background:#0f0f23;padding:8px 12px;border-radius:8px;font-size:12px">Niệu đạo: <b>{{getStat(name,'số_lần_lên_đỉnh_niệu_đạo')}}</b></div>
+<div style="background:#0f0f23;padding:8px 12px;border-radius:8px;font-size:12px">Nhũ hoa: <b>{{getStat(name,'số_lần_lên_đỉnh_nhũ_hoa')}}</b></div>
+</div></div>
+<div v-if="!roleNames.length" style="background:#1a1a2e;border-radius:12px;padding:32px;text-align:center;color:#888;border:1px solid #2a2a4a">
+<div style="font-size:48px;margin-bottom:12px">👤</div><div>Chưa có dữ liệu nhân vật</div><div style="font-size:12px;margin-top:4px">Bắt đầu chơi để xem chỉ số</div>
+</div></div>`};
+
+const PageHypno={props:['sys'],setup(p){
+const energy=C(()=>p.sys?._năng_lượng_mc||0);
+const maxEnergy=C(()=>p.sys?._giới_hạn_năng_lượng_mc||100);
+const mcPoints=C(()=>p.sys?.điểm_mc_hiện_tại||0);
+const tier=C(()=>p.sys?._cấp_độ_đăng_ký_app_thôi_miên||'Chưa đăng ký');
+const features=[
+{id:'vip1_stats',name:'Trạng thái可视化',desc:'Xem chỉ số nhân vật',tier:'VIP0',cost:0},
+{id:'vip1_truth_serum',name:'Thuốc nói thật',desc:'Bắt đối tượng nói thật',tier:'VIP1',cost:5},
+{id:'vip2_sensitivity',name:'Tăng nhạy cảm',desc:'Tăng độ nhạy cảm một部位',tier:'VIP2',cost:8},
+{id:'vip2_estrus',name:'Phát tình',desc:'Kích thích phát tình',tier:'VIP2',cost:10},
+{id:'vip2_pleasure',name:'Ban khoái cảm',desc:'Cho đối tượng khoái cảm',tier:'VIP2',cost:6},
+{id:'vip3_memory',name:'Xóa ký ức',desc:'Xóa一段 ký ức',tier:'VIP3',cost:15},
+{id:'vip3_hand',name:'Bàn tay vô hình',desc:'Tạoảo giác bịchạm',tier:'VIP3',cost:12},
+{id:'vip3_fix',name:'Cố định身体',desc:'Đối tượng无法行动',tier:'VIP3',cost:10},
+{id:'vip4_pain',name:'Chuyển đổi痛觉',desc:'痛觉→khoái cảm',tier:'VIP4',cost:20},
+{id:'vip4_climax',name:'Cưỡng chế高潮',desc:'Buộc đối tượng高潮',tier:'VIP4',cost:25},
+{id:'vip5_clothes',name:'Bộ đồ Hoàng đế',desc:'Thay đổi感知 về衣服',tier:'VIP5',cost:30},
+{id:'vip6_mind',name:'Cấy ghép人格',desc:'植入一段人格',tier:'VIP6',cost:50}
+];
+const useFeature=async f=>{alert('Tính năng: '+f.name+'\nCần: '+f.tier+' | Phí: '+f.cost+' MC')};
+return{energy,maxEnergy,mcPoints,tier,features,useFeature};},
+template:`<div>
+<div style="background:linear-gradient(135deg,#4f46e5,#7c3aed);border-radius:16px;padding:24px;margin-bottom:16px;text-align:center">
+<div style="font-size:48px;margin-bottom:8px">🌀</div>
+<div style="font-size:24px;font-weight:bold">App Thôi Miên</div>
+<div style="font-size:14px;opacity:0.8;margin-top:4px">Gói hiện tại: {{tier}}</div>
+<div style="display:flex;justify-content:center;gap:24px;margin-top:16px">
+<div><div style="font-size:24px;font-weight:bold">{{energy}}/{{maxEnergy}}</div><div style="font-size:11px;opacity:0.7">⚡ Năng lượng</div></div>
+<div><div style="font-size:24px;font-weight:bold">{{mcPoints}}</div><div style="font-size:11px;opacity:0.7">💰 Điểm MC</div></div>
+</div></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px">
+<div v-for="f in features" :key="f.id" @click="useFeature(f)" style="background:#1a1a2e;border-radius:12px;padding:16px;cursor:pointer;border:1px solid #2a2a4a;transition:all .2s" onmouseover="this.style.borderColor='#6366f1'" onmouseout="this.style.borderColor='#2a2a4a'">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="font-weight:bold">{{f.name}}</div>
+<span style="background:#6366f1;padding:2px 8px;border-radius:12px;font-size:11px">{{f.tier}}</span></div>
+<div style="font-size:13px;color:#888;margin-top:4px">{{f.desc}}</div>
+<div style="font-size:12px;color:#fbbf24;margin-top:4px">{{f.cost}} MC</div>
+</div></div></div>`};
+
+const PageCalendar={props:['sys'],setup(p){
+const day=C(()=>p.sys?.ngày_hiện_tại||'');
+const schedule=C(()=>p.sys?.lịch_trình_hiện_tại||'');
+const event=C(()=>p.sys?.sự_kiện_hiện_tại_hoặc_tiếp_theo||'');
+const events=[
+{month:1,day:1,name:'Tân Niên',type:'Lễ'},
+{month:1,day:null,name:'Ngày Thành Nhân (T2 tuần 2)',type:'Lễ'},
+{month:2,day:11,name:'Ngày Quốc Khánh',type:'Lễ'},
+{month:2,day:null,name:'Setsubun (Ném đậu)',type:'Sự kiện'},
+{month:3,null,name:'Ngày Xuân Phân',type:'Lễ'},
+{month:4,null,name:'Lễ nhập học/Khai giảng',type:'Sự kiện'},
+{month:4,null,name:'Tuần tuyển quân CLB',type:'Sự kiện'},
+{month:5,null,name:'Thi giữa kỳ Học kỳ 1',type:'Học tập'},
+{month:7,null,name:'Ngày Biển',type:'Lễ'},
+{month:7,null,name:'Bắt đầu nghỉ hè',type:'Sự kiện'},
+{month:8,null,name:'Comiket Hè',type:'Sự kiện'},
+{month:9,null,name:'Ngày Kính Lão',type:'Lễ'},
+{month:9,null,name:'Khai giảng Học kỳ 2',type:'Sự kiện'},
+{month:9,null,name:'Hội thao',type:'Sự kiện'},
+{month:10,null,name:'Ngày Thể Thao',type:'Lễ'},
+{month:10,null,name:'Lễ hội Văn hóa',type:'Sự kiện'},
+{month:11,null,name:'Ngày Văn Hóa',type:'Lễ'},
+{month:12,null,name:'Sinh Nhật Thiên Hoàng',type:'Lễ'},
+{month:12,day:24,name:'Đêm Giáng Sinh',type:'Lễ'},
+{month:12,day:25,name:'Giáng Sinh',type:'Lễ'},
+{month:12,day:31,name:'Đêm Giao Thừa',type:'Lễ'}
+];
+return{day,schedule,event,events};},
+template:`<div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;margin-bottom:16px;border:1px solid #2a2a4a">
+<div style="font-size:18px;font-weight:bold;margin-bottom:12px;color:#a5b4fc">📅 Lịch</div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">📅 Ngày hiện tại</div><div style="font-size:20px;font-weight:bold">{{day||'--'}}</div></div>
+<div style="background:#0f0f23;padding:12px;border-radius:8px"><div style="font-size:11px;color:#888">📋 Lịch trình</div><div style="font-size:14px">{{schedule||'--'}}</div></div>
+</div>
+<div v-if="event" style="background:#4f46e5;padding:12px;border-radius:8px;margin-top:12px"><div style="font-size:11px;opacity:0.7">🎉 Sự kiện</div><div style="font-weight:bold">{{event}}</div></div>
+</div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;border:1px solid #2a2a4a">
+<div style="font-size:16px;font-weight:bold;margin-bottom:12px">🗓️ Sự kiện trong năm</div>
+<div v-for="(e,i) in events" :key="i" style="display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid #2a2a4a">
+<span style="background:e.type==='Lễ'?'#ef4444':'#3b82f6';padding:2px 8px;border-radius:8px;font-size:11px;min-width:60px;text-align:center">{{e.type}}</span>
+<span style="font-weight:bold">{{e.name}}</span>
+<span style="color:#888;font-size:12px">Tháng {{e.month}}{{e.day?' - Ngày '+e.day:''}}</span>
+</div></div></div>`};
+
+const PageQuests={props:['tasks'],setup(p){
+const taskList=C(()=>{const t=p.tasks;if(!t)return[];return Object.entries(t).map(([k,v])=>({name:k,...v}))});
+return{taskList};},
+template:`<div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;border:1px solid #2a2a4a">
+<div style="font-size:18px;font-weight:bold;margin-bottom:16px;color:#a5b4fc">🏆 Nhiệm vụ</div>
+<div v-if="!taskList.length" style="text-align:center;padding:32px;color:#888">
+<div style="font-size:48px;margin-bottom:12px">📋</div><div>Chưa có nhiệm vụ</div></div>
+<div v-for="t in taskList" :key="t.name" style="background:#0f0f23;padding:16px;border-radius:8px;margin-bottom:8px;border-left:4px solid #6366f1">
+<div style="display:flex;justify-content:space-between;align-items:center">
+<div style="font-weight:bold">{{t.name}}</div>
+<span :style="{background:t.đã_hoàn_thành?'#22c55e':'#f59e0b',padding:'2px 8px',borderRadius:'8px',fontSize:'11px'}">{{t.đã_hoàn_thành?'Đã hoàn thành':'Đang làm'}}</span></div>
+<div style="font-size:13px;color:#888;margin-top:4px">{{t.điều_kiện_hoàn_thành||'Chưa rõ'}}</div>
+</div></div></div>`};
+
+const PageInventory={props:['inv'],setup(p){
+const items=C(()=>{const i=p.inv;if(!i||typeof i!=='object')return[];return Object.entries(i).map(([k,v])=>({name:k,...v}))});
+return{items};},
+template:`<div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;border:1px solid #2a2a4a">
+<div style="font-size:18px;font-weight:bold;margin-bottom:16px;color:#a5b4fc">🎒 Kho đồ</div>
+<div v-if="!items.length" style="text-align:center;padding:32px;color:#888">
+<div style="font-size:48px;margin-bottom:12px">📦</div><div>Chưa có vật phẩm</div></div>
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
+<div v-for="it in items" :key="it.name" style="background:#0f0f23;padding:12px;border-radius:8px;border:1px solid #2a2a4a">
+<div style="font-weight:bold">{{it.name}}</div>
+<div style="font-size:12px;color:#888;margin-top:4px">{{it.mô_tả||'Không có mô tả'}}</div>
+<div style="font-size:14px;font-weight:bold;color:#fbbf24;margin-top:4px">x{{it.số_lượng||0}}</div>
+</div></div></div></div>`};
+
+const PageHelp={template:`<div>
+<div style="background:#1a1a2e;border-radius:12px;padding:16px;border:1px solid #2a2a4a">
+<div style="font-size:18px;font-weight:bold;margin-bottom:16px;color:#a5b4fc">❓ Trợ giúp</div>
+<div style="margin-bottom:16px"><div style="font-weight:bold;margin-bottom:4px">📱 App Thôi Miên</div><div style="font-size:13px;color:#888">Ứng dụng mô phỏng với cơ chế thôi miên. Nâng cấp VIP để mở khóa更多 tính năng.</div></div>
+<div style="margin-bottom:16px"><div style="font-weight:bold;margin-bottom:4px">⚡ Năng lượng MC</div><div style="font-size:13px;color:#888">Năng lượng用于 sử dụng các tính năng. Hồi phục 50% mỗi ngày. Có thể mua thêm bằng điểm MC.</div></div>
+<div style="margin-bottom:16px"><div style="font-weight:bold;margin-bottom:4px">🔍 Độ khả nghi</div><div style="font-size:13px;color:#888">Mức độ bị phát hiện. Giữ dưới 5% để tránh bị怀疑. Giảm 10 điểm mỗi ngày.</div></div>
+<div style="margin-bottom:16px"><div style="font-weight:bold;margin-bottom:4px">🎯 Nhiệm vụ</div><div style="font-size:13px;color:#888">Hoàn thành nhiệm vụ để nhận điểm MC. Mỗi nhiệm vụ có điều kiện riêng.</div></div>
+<div><div style="font-weight:bold;margin-bottom:4px">💰 Điểm MC</div><div style="font-size:13px;color:#888">Điểm用于 mua năng lượng, nâng cấp VIP, và sử dụng tính năng. Nhận được khi hoàn thành nhiệm vụ.</div></div></div></div>`};
+
+/* ===== Mount ===== */
+const pinia=P();const app=$(App);app.use(pinia);
+app.component('PageStatus',PageStatus);app.component('PageHypno',PageHypno);
+app.component('PageCalendar',PageCalendar);app.component('PageQuests',PageQuests);
+app.component('PageInventory',PageInventory);app.component('PageHelp',PageHelp);
+app.mount('#app');
+console.info('[HypnoOS] Giao diện bảng trạng thái đã tải');
+</script></head><body><div id="app"></div></body>
